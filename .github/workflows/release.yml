@@ -32,6 +32,7 @@ jobs:
 
       - name: Build Genuine LINKDROP Android APK
         run: |
+          set -e
           mkdir -p /tmp/backup_app
           cp -r lib /tmp/backup_app/
           cp pubspec.yaml /tmp/backup_app/
@@ -49,8 +50,16 @@ jobs:
           mkdir -p ~/.android
           cp /tmp/backup_app/debug.keystore ~/.android/debug.keystore
 
-          # Explicitly inject signingConfigs before buildTypes in build.gradle
-          sed -i '/buildTypes {/i \    signingConfigs {\n        debug {\n            storeFile file("debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }' android/app/build.gradle
+          # Explicitly inject signingConfigs if build.gradle exists
+          if [ -f android/app/build.gradle ]; then
+            sed -i '/buildTypes {/i \    signingConfigs {\n        debug {\n            storeFile file("debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }' android/app/build.gradle
+          fi
+
+          # Ensure minSdk is at least 21
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
+          fi
 
           # Add necessary permissions to AndroidManifest.xml
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>' android/app/src/main/AndroidManifest.xml
@@ -66,7 +75,7 @@ jobs:
           mkdir -p release-files
           cp build/app/outputs/flutter-apk/app-debug.apk release-files/LINKDROP.apk
 
-          TAG="${GITHUB_REF_NAME:-v1.0.0}"
+          TAG="${GITHUB_REF_NAME:-v1.0.2}"
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
