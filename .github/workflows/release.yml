@@ -32,7 +32,6 @@ jobs:
 
       - name: Build Genuine LINKDROP Android APK
         run: |
-          set -e
           mkdir -p /tmp/backup_app
           cp -r lib /tmp/backup_app/
           cp pubspec.yaml /tmp/backup_app/
@@ -53,7 +52,7 @@ jobs:
           mkdir -p android/app
           cp /tmp/backup_app/debug.keystore android/app/debug.keystore
 
-          # Safely inject permissions into AndroidManifest.xml using python (no sed escaping bugs)
+          # Safely inject permissions into AndroidManifest.xml
           python3 -c "
           with open('android/app/src/main/AndroidManifest.xml', 'r') as f:
               content = f.read()
@@ -69,7 +68,7 @@ jobs:
               f.write(content)
           "
 
-          # Safely adjust minSdk to 21 for video_player_android support
+          # Safely enforce compileSdk 34 and minSdk 21 in both build.gradle and build.gradle.kts
           python3 -c "
           import os
           for path in ['android/app/build.gradle', 'android/app/build.gradle.kts']:
@@ -79,13 +78,32 @@ jobs:
                   c = c.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
                   c = c.replace('minSdk = flutter.minSdkVersion', 'minSdk = 21')
                   c = c.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
+                  c = c.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 34')
+                  c = c.replace('compileSdkVersion = flutter.compileSdkVersion', 'compileSdkVersion = 34')
+                  c = c.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 34')
+                  c = c.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 34')
+                  c = c.replace('targetSdkVersion = flutter.targetSdkVersion', 'targetSdkVersion = 34')
+                  c = c.replace('targetSdkVersion flutter.targetSdkVersion', 'targetSdkVersion 34')
                   with open(path, 'w') as f:
                       f.write(c)
-                  print(f'Successfully updated minSdk in {path}')
+                  print(f'Successfully configured SDK levels in {path}')
           "
 
           flutter pub get
-          flutter build apk --debug
+
+          echo "Starting Flutter APK build..."
+          flutter build apk --debug 2>&1 | tee /tmp/flutter_build.log || true
+
+          if [ ! -f build/app/outputs/flutter-apk/app-debug.apk ]; then
+            echo "❌ APK build failed! Diagnostic report:"
+            echo "## ❌ Build Failure Log" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 /tmp/flutter_build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "======================= TAIL 120 LINES OF LOG ======================="
+            tail -n 120 /tmp/flutter_build.log
+            exit 1
+          fi
 
           echo "Verifying compiled APK signature:"
           keytool -printcert -jarfile build/app/outputs/flutter-apk/app-debug.apk
@@ -95,7 +113,7 @@ jobs:
           mkdir -p release-files
           cp build/app/outputs/flutter-apk/app-debug.apk release-files/LINKDROP.apk
 
-          TAG="${GITHUB_REF_NAME:-v1.0.6}"
+          TAG="${GITHUB_REF_NAME:-v1.0.7}"
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
