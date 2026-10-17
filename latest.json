@@ -3,8 +3,8 @@
   "release_date": "2026-10-17T09:00:00Z",
   "release_notes": "🚀 LINKDROP Initial Release: Dark premium UI with violet accents, smart direct video link detection, native HTTP streaming, HTTP Range byte resumption, inline video preview, offline player, Khmer & English localization, and in-app auto updates via GitHub.",
   "mandatory": false,
-  "apk_url": "https://github.com/MEYYYNASH/LINKDROP/releases/download/v1.0.0/LINKDROP.apk",
+  "apk_url": "https://github.com/MEYYYNASH/linkdrop/releases/download/v1.0.0/LINKDROP.apk",
   "sha256_apk": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "exe_url": "https://github.com/MEYYYNASH/LINKDROP/releases/download/v1.0.0/LINKDROP-Windows.zip",
+  "exe_url": "https://github.com/MEYYYNASH/linkdrop/releases/download/v1.0.0/LINKDROP-Windows.zip",
   "sha256_exe": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 }

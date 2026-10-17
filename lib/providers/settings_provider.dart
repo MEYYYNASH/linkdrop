@@ -8,7 +8,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _blockPrivateIps = true;
   bool _enforceHttps = true;
   bool _autoSanitizeFileNames = true;
-  String _gitHubRepo = 'MEYYYNASH/LINKDROP';
+  String _gitHubRepo = 'MEYYYNASH/linkdrop';
   String? _customDownloadPath;
   static const String appVersion = '1.0.0';
 
