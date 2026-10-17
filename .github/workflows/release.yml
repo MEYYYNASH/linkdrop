@@ -32,86 +32,45 @@ jobs:
 
       - name: Build Genuine LINKDROP Android APK
         run: |
-          mkdir -p /tmp/backup_app
-          cp -r lib /tmp/backup_app/
-          cp pubspec.yaml /tmp/backup_app/
-          cp debug.keystore /tmp/backup_app/
-
-          # Clean and generate pristine Android project wrapper
-          rm -rf android
-          flutter create --platforms=android --org com.linkdrop --project-name linkdrop .
-
-          # Restore our app code and pubspec
-          rm -rf lib
-          cp -r /tmp/backup_app/lib .
-          cp /tmp/backup_app/pubspec.yaml .
-
-          # Setup fixed permanent debug keystore for deterministic APK signing
+          # Ensure keystore is in place for reproducible signing
           mkdir -p ~/.android
-          cp /tmp/backup_app/debug.keystore ~/.android/debug.keystore
-          mkdir -p android/app
-          cp /tmp/backup_app/debug.keystore android/app/debug.keystore
-
-          # Safely inject permissions into AndroidManifest.xml
-          python3 -c "
-          with open('android/app/src/main/AndroidManifest.xml', 'r') as f:
-              content = f.read()
-          perms = '''
-              <uses-permission android:name=\"android.permission.INTERNET\"/>
-              <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>
-              <uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\"/>
-              <uses-permission android:name=\"android.permission.READ_MEDIA_VIDEO\"/>
-              <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>
-          '''
-          content = content.replace('<application', perms + '    <application')
-          with open('android/app/src/main/AndroidManifest.xml', 'w') as f:
-              f.write(content)
-          "
-
-          # Safely enforce compileSdk 34 and minSdk 21 in both build.gradle and build.gradle.kts
-          python3 -c "
-          import os
-          for path in ['android/app/build.gradle', 'android/app/build.gradle.kts']:
-              if os.path.exists(path):
-                  with open(path, 'r') as f:
-                      c = f.read()
-                  c = c.replace('minSdkVersion = flutter.minSdkVersion', 'minSdkVersion = 21')
-                  c = c.replace('minSdk = flutter.minSdkVersion', 'minSdk = 21')
-                  c = c.replace('minSdkVersion flutter.minSdkVersion', 'minSdkVersion 21')
-                  c = c.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 34')
-                  c = c.replace('compileSdkVersion = flutter.compileSdkVersion', 'compileSdkVersion = 34')
-                  c = c.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 34')
-                  c = c.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 34')
-                  c = c.replace('targetSdkVersion = flutter.targetSdkVersion', 'targetSdkVersion = 34')
-                  c = c.replace('targetSdkVersion flutter.targetSdkVersion', 'targetSdkVersion 34')
-                  with open(path, 'w') as f:
-                      f.write(c)
-                  print(f'Successfully configured SDK levels in {path}')
-          "
+          cp android/app/debug.keystore ~/.android/debug.keystore
 
           flutter pub get
 
-          echo "Starting Flutter APK build..."
-          flutter build apk --debug 2>&1 | tee /tmp/flutter_build.log || true
+          echo "Starting Flutter APK release build..."
+          flutter build apk --release 2>&1 | tee /tmp/flutter_build.log || true
 
-          if [ ! -f build/app/outputs/flutter-apk/app-debug.apk ]; then
+          if [ ! -f build/app/outputs/flutter-apk/app-release.apk ]; then
+            echo "Trying debug build fallback..."
+            flutter build apk --debug 2>&1 | tee -a /tmp/flutter_build.log || true
+          fi
+
+          TARGET_APK=""
+          if [ -f build/app/outputs/flutter-apk/app-release.apk ]; then
+            TARGET_APK="build/app/outputs/flutter-apk/app-release.apk"
+          elif [ -f build/app/outputs/flutter-apk/app-debug.apk ]; then
+            TARGET_APK="build/app/outputs/flutter-apk/app-debug.apk"
+          else
             echo "❌ APK build failed! Diagnostic report:"
             echo "## ❌ Build Failure Log" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -n 120 /tmp/flutter_build.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            echo "======================= TAIL 120 LINES OF LOG ======================="
             tail -n 120 /tmp/flutter_build.log
             exit 1
           fi
 
+          echo "Selected APK: $TARGET_APK"
+          echo "TARGET_APK=$TARGET_APK" >> $GITHUB_ENV
+
           echo "Verifying compiled APK signature:"
-          keytool -printcert -jarfile build/app/outputs/flutter-apk/app-debug.apk
+          keytool -printcert -jarfile "$TARGET_APK"
 
       - name: Assemble Release Assets & Generate Checksums
         run: |
           mkdir -p release-files
-          cp build/app/outputs/flutter-apk/app-debug.apk release-files/LINKDROP.apk
+          cp "$TARGET_APK" release-files/LINKDROP.apk
 
           TAG="${GITHUB_REF_NAME:-v1.0.9}"
           VERSION="${TAG#v}"

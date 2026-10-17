@@ -137,7 +137,7 @@ class UpdateService {
     return null;
   }
 
-  /// Downloads update asset with live progress directly to persistent storage
+  /// Downloads update asset with live progress directly to persistent storage with binary headers & validation
   Future<File> downloadUpdate({
     required String downloadUrl,
     required String fileName,
@@ -156,12 +156,39 @@ class UpdateService {
       } catch (_) {}
     }
 
-    await _dio.download(
+    final downloadDio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 15),
+        followRedirects: true,
+        maxRedirects: 8,
+        headers: {
+          'Accept': '*/*',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      ),
+    );
+
+    await downloadDio.download(
       downloadUrl,
       savePath,
       cancelToken: _downloadCancelToken,
       onReceiveProgress: onProgress,
     );
+
+    // Validate that the file is not empty and is a valid archive
+    if (!targetFile.existsSync() || targetFile.lengthSync() < 10000) {
+      throw Exception('Downloaded update package is invalid or incomplete. Please check your network.');
+    }
+
+    // Verify it starts with standard ZIP/APK header (PK..)
+    if (fileName.endsWith('.apk')) {
+      final header = await targetFile.openRead(0, 4).first;
+      if (header.length < 4 || header[0] != 0x50 || header[1] != 0x4B) {
+        try { targetFile.deleteSync(); } catch (_) {}
+        throw Exception('The server returned an invalid file instead of an APK. Please download directly from GitHub.');
+      }
+    }
 
     return targetFile;
   }
