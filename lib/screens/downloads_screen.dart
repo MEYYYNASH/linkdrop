@@ -139,7 +139,7 @@ class DownloadsScreen extends StatelessWidget {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 100),
                     itemCount: activeTasks.length,
                     itemBuilder: (context, index) {
                       final task = activeTasks[index];

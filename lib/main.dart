@@ -4,10 +4,15 @@ import 'package:provider/provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/download_provider.dart';
 import 'theme/app_theme.dart';
+import 'models/update_info.dart';
+import 'services/update_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/settings_screen.dart';
+import 'widgets/dynamic_nav_bar.dart';
+import 'widgets/update_notification_banner.dart';
+import 'widgets/update_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,7 +22,7 @@ void main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppTheme.darkBg,
+      systemNavigationBarColor: Colors.transparent,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -58,6 +63,8 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
+  UpdateInfo? _detectedUpdate;
+  bool _dismissedBanner = false;
 
   final List<Widget> _screens = const [
     HomeScreen(),
@@ -67,62 +74,147 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _checkAppUpdateSilently();
+  }
+
+  Future<void> _checkAppUpdateSilently() async {
+    // Wait 2 seconds after UI renders before checking in background
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    final settings = Provider.of<SettingsProvider>(context, listen: false);
+    final updater = UpdateService();
+
+    final update = await updater.checkForUpdate(
+      repoOwnerAndName: settings.gitHubRepo,
+      currentVersion: SettingsProvider.appVersion,
+    );
+
+    if (mounted && update != null) {
+      setState(() {
+        _detectedUpdate = update;
+        _dismissedBanner = false;
+      });
+    }
+  }
+
+  void _showUpdateDialog(UpdateInfo info) {
+    final l10n = Provider.of<SettingsProvider>(context, listen: false).l10n;
+    showDialog(
+      context: context,
+      builder: (ctx) => UpdateDialog(
+        updateInfo: info,
+        currentVersion: SettingsProvider.appVersion,
+        l10n: l10n,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsProvider>(context);
     final downloads = Provider.of<DownloadProvider>(context);
     final l10n = settings.l10n;
 
     final activeCount = downloads.activeTasks.length;
+    final hasUpdate = _detectedUpdate != null;
+
+    final navItems = [
+      DynamicNavBarItem(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: l10n.get('nav_home'),
+      ),
+      DynamicNavBarItem(
+        icon: Icons.downloading_rounded,
+        activeIcon: Icons.download_rounded,
+        label: l10n.get('nav_downloads'),
+        badgeCount: activeCount,
+      ),
+      DynamicNavBarItem(
+        icon: Icons.video_library_outlined,
+        activeIcon: Icons.video_library_rounded,
+        label: l10n.get('nav_history'),
+      ),
+      DynamicNavBarItem(
+        icon: Icons.settings_outlined,
+        activeIcon: Icons.settings_rounded,
+        label: l10n.get('nav_settings'),
+        hasUpdateBadge: hasUpdate,
+      ),
+    ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      extendBody: true,
+      body: Stack(
+        children: [
+          // Background ambient gradient glows
+          Positioned(
+            top: -100,
+            left: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primaryViolet.withOpacity(0.12),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 50,
+            right: -80,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.cyanGlow.withOpacity(0.08),
+              ),
+            ),
+          ),
+
+          // Main screen view
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                // Top floating in-app update notification banner
+                if (hasUpdate && !_dismissedBanner)
+                  UpdateNotificationBanner(
+                    updateInfo: _detectedUpdate!,
+                    l10n: l10n,
+                    onInstallTap: () => _showUpdateDialog(_detectedUpdate!),
+                    onDismiss: () {
+                      setState(() {
+                        _dismissedBanner = true;
+                      });
+                    },
+                  ),
+
+                Expanded(
+                  child: IndexedStack(
+                    index: _currentIndex,
+                    children: _screens,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF1F1F3D), width: 1)),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: [
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.home_outlined),
-              activeIcon: const Icon(Icons.home_rounded),
-              label: l10n.get('nav_home'),
-            ),
-            BottomNavigationBarItem(
-              icon: Badge(
-                isLabelVisible: activeCount > 0,
-                label: Text('$activeCount'),
-                backgroundColor: AppTheme.primaryViolet,
-                child: const Icon(Icons.downloading_rounded),
-              ),
-              activeIcon: Badge(
-                isLabelVisible: activeCount > 0,
-                label: Text('$activeCount'),
-                backgroundColor: AppTheme.primaryViolet,
-                child: const Icon(Icons.download_rounded),
-              ),
-              label: l10n.get('nav_downloads'),
-            ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.video_library_outlined),
-              activeIcon: const Icon(Icons.video_library_rounded),
-              label: l10n.get('nav_history'),
-            ),
-            BottomNavigationBarItem(
-              icon: const Icon(Icons.settings_outlined),
-              activeIcon: const Icon(Icons.settings_rounded),
-              label: l10n.get('nav_settings'),
-            ),
-          ],
-        ),
+
+      // Dynamic Island / Floating Phone Navigation Bar
+      bottomNavigationBar: DynamicNavBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: navItems,
       ),
     );
   }

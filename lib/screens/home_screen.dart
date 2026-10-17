@@ -197,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: const EdgeInsets.only(left: 18, right: 18, top: 12, bottom: 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -207,9 +207,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 margin: const EdgeInsets.only(bottom: 14),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryVioletDark.withOpacity(0.35),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.primaryViolet.withOpacity(0.5)),
+                  gradient: LinearGradient(
+                    colors: [
+                      AppTheme.primaryVioletDark.withOpacity(0.5),
+                      const Color(0xFF1E1428).withOpacity(0.8),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.primaryViolet.withOpacity(0.6), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryViolet.withOpacity(0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Row(
                   children: [
@@ -221,11 +233,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
-                    TextButton(
-                      style: TextButton.styleFrom(
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryViolet,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                       onPressed: () {
                         setState(() {
@@ -234,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         });
                         _analyzeCurrentUrl();
                       },
-                      child: Text(l10n.get('clipboard_action')),
+                      child: Text(l10n.get('clipboard_action'), style: const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -243,11 +257,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
             // Input card with Paste, Clear and Analyze
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF222245), width: 1.2),
+                color: const Color(0xFF13132B).withOpacity(0.9),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.primaryViolet.withOpacity(0.3), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryViolet.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

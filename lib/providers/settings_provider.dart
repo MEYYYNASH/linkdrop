@@ -10,7 +10,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _autoSanitizeFileNames = true;
   String _gitHubRepo = 'MEYYYNASH/linkdrop';
   String? _customDownloadPath;
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.9';
 
   String get languageCode => _languageCode;
   ThemeType get themeType => _themeType;
