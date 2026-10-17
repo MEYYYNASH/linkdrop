@@ -31,6 +31,25 @@ class _UpdateDialogState extends State<UpdateDialog> {
   String? _errorMessage;
   File? _downloadedFile;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkExistingFile();
+  }
+
+  Future<void> _checkExistingFile() async {
+    final fileName = Platform.isAndroid
+        ? 'LINKDROP-v${widget.updateInfo.version}.apk'
+        : 'LINKDROP-v${widget.updateInfo.version}.exe';
+    final existing = await _updateService.getExistingSavedUpdate(fileName);
+    if (existing != null && mounted) {
+      setState(() {
+        _downloadedFile = existing;
+        _isReadyToInstall = true;
+      });
+    }
+  }
+
   double get _progress {
     if (_totalBytes <= 0) return 0.0;
     return (_receivedBytes / _totalBytes).clamp(0.0, 1.0);
@@ -144,7 +163,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '${l10n.get('update_available')} (v${info.version})',
+              info.isUpdateAvailable
+                  ? '${l10n.get('update_available')} (v${info.version})'
+                  : 'Latest Release (v${info.version})',
               style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
@@ -217,6 +238,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   ),
                 ],
               ),
+              if (_downloadedFile != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Saved permanently in: ${_downloadedFile!.path}',
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                ),
+              ],
             ],
             if (_errorMessage != null) ...[
               const SizedBox(height: 14),
@@ -237,14 +265,19 @@ class _UpdateDialogState extends State<UpdateDialog> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryViolet),
             onPressed: _startUpdateDownload,
-            child: Text(l10n.get('update_download_btn')),
+            child: Text(info.isUpdateAvailable ? l10n.get('update_download_btn') : 'Re-download Package'),
           ),
-        if (_isReadyToInstall)
+        if (_isReadyToInstall) ...[
+          TextButton(
+            onPressed: _isDownloading ? null : _startUpdateDownload,
+            child: const Text('Re-download', style: TextStyle(color: Colors.white70)),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successGreen),
             onPressed: _triggerInstallation,
             child: const Text('Install Now'),
           ),
+        ],
       ],
     );
   }

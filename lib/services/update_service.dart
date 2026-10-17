@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/update_info.dart';
+import 'storage_service.dart';
 
 class UpdateService {
   final Dio _dio = Dio(
@@ -48,7 +49,7 @@ class UpdateService {
     }
   }
 
-  /// Checks the configured GitHub repository for the latest release
+  /// Checks the configured GitHub repository for the latest release and returns UpdateInfo
   Future<UpdateInfo?> checkForUpdate({
     required String repoOwnerAndName,
     required String currentVersion,
@@ -68,10 +69,8 @@ class UpdateService {
       final tagName = data['tag_name']?.toString() ?? '';
       final remoteVersion = tagName.replaceAll(RegExp(r'^v'), '');
 
-      // Strictly compare version
-      if (!isNewerVersion(currentVersion, remoteVersion)) {
-        return null; // App is up to date
-      }
+      // Check whether remote version is newer than current version
+      final hasUpdate = isNewerVersion(currentVersion, remoteVersion);
 
       final releaseNotes = data['body']?.toString() ?? 'No release notes provided.';
       final assets = (data['assets'] as List?) ?? [];
@@ -118,13 +117,27 @@ class UpdateService {
         sha256Apk: sha256Apk,
         sha256Exe: sha256Exe,
         publishedAt: data['published_at'] != null ? DateTime.tryParse(data['published_at']) : null,
+        isUpdateAvailable: hasUpdate,
       );
     } catch (e) {
       return null;
     }
   }
 
-  /// Downloads update asset with live progress
+  /// Returns saved update file if it exists in the downloads directory
+  Future<File?> getExistingSavedUpdate(String fileName) async {
+    try {
+      final storageService = StorageService();
+      final downloadDir = await storageService.getDownloadDirectory();
+      final targetFile = File(p.join(downloadDir, fileName));
+      if (await targetFile.exists() && (await targetFile.length()) > 0) {
+        return targetFile;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Downloads update asset with live progress directly to persistent storage
   Future<File> downloadUpdate({
     required String downloadUrl,
     required String fileName,
@@ -132,12 +145,15 @@ class UpdateService {
   }) async {
     _downloadCancelToken = CancelToken();
 
-    final tempDir = await getTemporaryDirectory();
-    final savePath = p.join(tempDir.path, fileName);
+    final storageService = StorageService();
+    final downloadDir = await storageService.getDownloadDirectory();
+    final savePath = p.join(downloadDir, fileName);
     final targetFile = File(savePath);
 
     if (targetFile.existsSync()) {
-      targetFile.deleteSync();
+      try {
+        targetFile.deleteSync();
+      } catch (_) {}
     }
 
     await _dio.download(

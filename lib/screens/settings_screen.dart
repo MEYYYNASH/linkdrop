@@ -44,10 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _updateStatusMessage = null;
     });
 
-    final info = await _updateService.checkForUpdate(
-      repoOwnerAndName: settings.gitHubRepo,
-      currentVersion: SettingsProvider.appVersion,
-    );
+    final info = await settings.checkGitHubUpdate();
 
     if (!mounted) return;
 
@@ -56,22 +53,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     if (info != null) {
-      showDialog(
-        context: context,
-        builder: (ctx) => UpdateDialog(
-          updateInfo: info,
-          currentVersion: SettingsProvider.appVersion,
-          l10n: l10n,
-        ),
-      );
+      if (info.isUpdateAvailable) {
+        showDialog(
+          context: context,
+          builder: (ctx) => UpdateDialog(
+            updateInfo: info,
+            currentVersion: SettingsProvider.appVersion,
+            l10n: l10n,
+          ),
+        );
+      } else {
+        setState(() {
+          _updateStatusMessage = 'App is up to date with GitHub (v${info.version})';
+        });
+        showDialog(
+          context: context,
+          builder: (ctx) => UpdateDialog(
+            updateInfo: info,
+            currentVersion: SettingsProvider.appVersion,
+            l10n: l10n,
+          ),
+        );
+      }
     } else {
       setState(() {
-        _updateStatusMessage = l10n.get('update_uptodate');
+        _updateStatusMessage = 'Could not reach GitHub Releases API.';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.get('update_uptodate')),
-          backgroundColor: AppTheme.successGreen,
+        const SnackBar(
+          content: Text('Could not reach GitHub Releases API. Check network or repository.'),
+          backgroundColor: AppTheme.dangerRed,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -248,21 +259,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.autorenew_rounded, color: AppTheme.primaryVioletLight, size: 24),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.autorenew_rounded, color: AppTheme.primaryVioletLight, size: 24),
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${l10n.get('current_version')}: v${SettingsProvider.appVersion}',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5),
+                          Row(
+                            children: [
+                              Text(
+                                '${l10n.get('current_version')}: v${SettingsProvider.appVersion}',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14.5),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryViolet.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppTheme.primaryViolet, width: 0.8),
+                                ),
+                                child: const Text(
+                                  'Installed',
+                                  style: TextStyle(color: AppTheme.primaryVioletLight, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Text(
+                                'Latest on GitHub: v${settings.latestVersionOnGitHub ?? 'Tap check below'}',
+                                style: TextStyle(
+                                  color: settings.hasUpdateAvailable ? AppTheme.accentNeon : const Color(0xFF94A3B8),
+                                  fontSize: 12,
+                                  fontWeight: settings.hasUpdateAvailable ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                              if (settings.hasUpdateAvailable) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accentNeon.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppTheme.accentNeon, width: 0.8),
+                                  ),
+                                  child: const Text(
+                                    'UPDATE',
+                                    style: TextStyle(color: AppTheme.accentNeon, fontSize: 9, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
                           Text(
                             'Repo: ${settings.gitHubRepo}',
-                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                            style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
                           ),
                         ],
                       ),
@@ -276,7 +336,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 14),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryViolet,
+                    backgroundColor: settings.hasUpdateAvailable ? AppTheme.accentNeon : AppTheme.primaryViolet,
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -286,9 +347,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Icon(Icons.cloud_download_rounded, size: 20),
+                      : Icon(settings.hasUpdateAvailable ? Icons.system_update_rounded : Icons.cloud_download_rounded, size: 20),
                   label: Text(
-                    _isCheckingUpdate ? 'Checking GitHub...' : l10n.get('btn_check_update'),
+                    _isCheckingUpdate
+                        ? 'Checking GitHub...'
+                        : settings.hasUpdateAvailable
+                            ? 'Update Available (v${settings.latestVersionOnGitHub})'
+                            : l10n.get('btn_check_update'),
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   onPressed: _isCheckingUpdate ? null : _checkForUpdate,

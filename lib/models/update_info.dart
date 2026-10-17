@@ -7,6 +7,7 @@ class UpdateInfo {
   final String? sha256Exe;
   final DateTime? publishedAt;
   final bool isMandatory;
+  final bool isUpdateAvailable;
 
   UpdateInfo({
     required this.version,
@@ -17,9 +18,10 @@ class UpdateInfo {
     this.sha256Exe,
     this.publishedAt,
     this.isMandatory = false,
+    this.isUpdateAvailable = false,
   });
 
-  factory UpdateInfo.fromJson(Map<String, dynamic> json) {
+  factory UpdateInfo.fromJson(Map<String, dynamic> json, {bool isUpdateAvailable = false}) {
     return UpdateInfo(
       version: json['version'] ?? '1.0.0',
       releaseNotes: json['release_notes'] ?? json['body'] ?? 'No release notes provided.',
@@ -31,6 +33,7 @@ class UpdateInfo {
           ? DateTime.tryParse(json['release_date'])
           : null,
       isMandatory: json['mandatory'] ?? false,
+      isUpdateAvailable: isUpdateAvailable,
     );
   }
 }

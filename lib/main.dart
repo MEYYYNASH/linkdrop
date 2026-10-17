@@ -85,14 +85,9 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     if (!mounted) return;
 
     final settings = Provider.of<SettingsProvider>(context, listen: false);
-    final updater = UpdateService();
+    final update = await settings.checkGitHubUpdate();
 
-    final update = await updater.checkForUpdate(
-      repoOwnerAndName: settings.gitHubRepo,
-      currentVersion: SettingsProvider.appVersion,
-    );
-
-    if (mounted && update != null) {
+    if (mounted && update != null && update.isUpdateAvailable) {
       setState(() {
         _detectedUpdate = update;
         _dismissedBanner = false;
