@@ -114,8 +114,24 @@ jobs:
             exit 1
           fi
 
+          echo "Deterministically signing APK with repository permanent keystore..."
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -V | tail -n 1)
+          echo "Using apksigner at: $APKSIGNER"
+          $APKSIGNER sign --ks /tmp/backup_app/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey --key-pass pass:android build/app/outputs/flutter-apk/app-debug.apk
+
           echo "Verifying compiled APK signature:"
           keytool -printcert -jarfile build/app/outputs/flutter-apk/app-debug.apk
+
+          python3 -c "
+          import subprocess
+          out = subprocess.check_output(['keytool', '-printcert', '-jarfile', 'build/app/outputs/flutter-apk/app-debug.apk']).decode()
+          expected_sha256 = 'DE:7F:CB:9F:62:3E:EB:CE:C1:FD:31:3C:5C:2C:1E:CC:8F:E7:3D:EA:12:63:74:78:1C:8F:8F:C6:35:16:1D:0E'
+          if expected_sha256 not in out:
+              print('❌ CRITICAL ERROR: APK signature does NOT match repository permanent key!')
+              print(out)
+              exit(1)
+          print('✅ SUCCESS: APK signature is 100% verified and permanently deterministic!')
+          "
 
       - name: Assemble Release Assets & Generate Checksums
         run: |
