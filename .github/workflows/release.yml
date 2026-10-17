@@ -51,20 +51,28 @@ jobs:
           mkdir -p ~/.android
           cp /tmp/backup_app/debug.keystore ~/.android/debug.keystore
 
-          # Restore our comprehensive AndroidManifest.xml (contains network, storage & install permissions)
+          # Restore our comprehensive AndroidManifest.xml
           cp /tmp/backup_app/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
-          # Ensure minSdk is 21 for video_player and modern plugins
+          # Configure compileSdk 34 and minSdk 21 in build.gradle
           if [ -f android/app/build.gradle ]; then
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle || true
+            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 34/g' android/app/build.gradle || true
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle || true
             
             # Inject deterministic signingConfig
             sed -i '/buildTypes {/i \    signingConfigs {\n        debug {\n            storeFile file("debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }' android/app/build.gradle
           fi
 
           flutter pub get
-          flutter build apk --debug
+          echo "Starting Flutter APK compilation with verbose tracing..."
+          flutter build apk --debug -v > build.log 2>&1 || {
+            echo "====================== BUILD FAILED: LAST 150 LINES ======================"
+            tail -n 150 build.log
+            exit 1
+          }
 
           echo "Verifying compiled APK signature:"
           keytool -printcert -jarfile build/app/outputs/flutter-apk/app-debug.apk
@@ -74,7 +82,7 @@ jobs:
           mkdir -p release-files
           cp build/app/outputs/flutter-apk/app-debug.apk release-files/LINKDROP.apk
 
-          TAG="${GITHUB_REF_NAME:-v1.0.3}"
+          TAG="${GITHUB_REF_NAME:-v1.0.4}"
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
