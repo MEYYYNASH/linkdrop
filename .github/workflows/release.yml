@@ -37,6 +37,7 @@ jobs:
           cp -r lib /tmp/backup_app/
           cp pubspec.yaml /tmp/backup_app/
           cp debug.keystore /tmp/backup_app/
+          cp android/app/src/main/AndroidManifest.xml /tmp/backup_app/AndroidManifest.xml
 
           rm -rf android
           flutter create --platforms=android --org com.linkdrop --project-name linkdrop .
@@ -50,19 +51,17 @@ jobs:
           mkdir -p ~/.android
           cp /tmp/backup_app/debug.keystore ~/.android/debug.keystore
 
-          # Explicitly inject signingConfigs if build.gradle exists
-          if [ -f android/app/build.gradle ]; then
-            sed -i '/buildTypes {/i \    signingConfigs {\n        debug {\n            storeFile file("debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }' android/app/build.gradle
-          fi
+          # Restore our comprehensive AndroidManifest.xml (contains network, storage & install permissions)
+          cp /tmp/backup_app/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
-          # Ensure minSdk is at least 21
+          # Ensure minSdk is 21 for video_player and modern plugins
           if [ -f android/app/build.gradle ]; then
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle || true
+            
+            # Inject deterministic signingConfig
+            sed -i '/buildTypes {/i \    signingConfigs {\n        debug {\n            storeFile file("debug.keystore")\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }' android/app/build.gradle
           fi
-
-          # Add necessary permissions to AndroidManifest.xml
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>' android/app/src/main/AndroidManifest.xml
 
           flutter pub get
           flutter build apk --debug
@@ -75,12 +74,11 @@ jobs:
           mkdir -p release-files
           cp build/app/outputs/flutter-apk/app-debug.apk release-files/LINKDROP.apk
 
-          TAG="${GITHUB_REF_NAME:-v1.0.2}"
+          TAG="${GITHUB_REF_NAME:-v1.0.3}"
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           APK_SHA=$(sha256sum release-files/LINKDROP.apk | awk '{print $1}')
-          APK_SIZE=$(stat -c%s release-files/LINKDROP.apk)
 
           cat <<EOF > release-files/latest.json
           {

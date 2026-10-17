@@ -219,12 +219,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         thumbColor: AppTheme.primaryVioletLight,
                       ),
                       child: Slider(
-                        value: _controller.value.position.inMilliseconds.toDouble().clamp(
-                              0.0,
-                              _controller.value.duration.inMilliseconds.toDouble(),
-                            ),
+                        value: _controller.value.duration.inMilliseconds > 0
+                            ? _controller.value.position.inMilliseconds.toDouble().clamp(
+                                  0.0,
+                                  _controller.value.duration.inMilliseconds.toDouble(),
+                                )
+                            : 0.0,
                         min: 0.0,
-                        max: _controller.value.duration.inMilliseconds.toDouble(),
+                        max: _controller.value.duration.inMilliseconds > 0
+                            ? _controller.value.duration.inMilliseconds.toDouble()
+                            : 1.0,
                         onChanged: (val) {
                           _controller.seekTo(Duration(milliseconds: val.toInt()));
                         },
