@@ -143,10 +143,10 @@ class UrlValidator {
       // Extract filename from Content-Disposition if present
       String? fileName;
       final disposition = headers.value('content-disposition');
-      if (disposition != null && disposition.contains('filename=')) {
-        final match = RegExp(r'filename\*?=(?:UTF-8\'\')?["\x27]?([^";\x27]+)["\x27]?').firstMatch(disposition);
+      if (disposition != null && disposition.contains('filename')) {
+        final match = RegExp(r'filename\*?=(?:UTF-8)?["\x27]?([^";\x27]+)', caseSensitive: false).firstMatch(disposition);
         if (match != null) {
-          fileName = Uri.decodeComponent(match.group(1) ?? '');
+          fileName = Uri.decodeComponent(match.group(1)?.replaceAll('"', '').replaceAll("'", '').trim() ?? '');
         }
       }
 
