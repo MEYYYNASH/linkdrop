@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -65,6 +66,7 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
   UpdateInfo? _detectedUpdate;
   bool _dismissedBanner = false;
+  Timer? _periodicUpdateTimer;
 
   final List<Widget> _screens = const [
     HomeScreen(),
@@ -77,6 +79,16 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
   void initState() {
     super.initState();
     _checkAppUpdateSilently();
+    // Periodically check every 15 minutes for new GitHub releases
+    _periodicUpdateTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      _checkAppUpdateSilently();
+    });
+  }
+
+  @override
+  void dispose() {
+    _periodicUpdateTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkAppUpdateSilently() async {
@@ -88,10 +100,40 @@ class _MainNavigationShellState extends State<MainNavigationShell> {
     final update = await settings.checkGitHubUpdate();
 
     if (mounted && update != null && update.isUpdateAvailable) {
+      final isNewDetection = _detectedUpdate?.version != update.version;
       setState(() {
         _detectedUpdate = update;
         _dismissedBanner = false;
       });
+
+      // Send visible in-app notification prompt when a new update is found
+      if (isNewDetection && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.rocket_launch_rounded, color: AppTheme.accentNeon, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'New update available: v${update.version}!',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'UPDATE',
+              textColor: AppTheme.cyanGlow,
+              onPressed: () => _showUpdateDialog(update),
+            ),
+            backgroundColor: const Color(0xFF3B0764),
+            duration: const Duration(seconds: 8),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        );
+      }
     }
   }
 

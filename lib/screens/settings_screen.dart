@@ -64,14 +64,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         setState(() {
-          _updateStatusMessage = 'App is up to date with GitHub (v${info.version})';
+          _updateStatusMessage = '✓ You are already on the latest version (v${info.version}). No new download needed.';
         });
-        showDialog(
-          context: context,
-          builder: (ctx) => UpdateDialog(
-            updateInfo: info,
-            currentVersion: SettingsProvider.appVersion,
-            l10n: l10n,
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppTheme.successGreen, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'App is up to date (v${info.version}). No new release needed.',
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF13132B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
