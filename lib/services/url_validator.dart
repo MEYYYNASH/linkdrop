@@ -116,49 +116,96 @@ class UrlValidator {
       }
 
       String resolvedUrl = response.realUri.toString();
+      String? extractedTitle;
 
-      // Check if it's an HTML page — try to extract embedded video stream
+      // Check if it's an HTML page — extract video title & embedded video stream
       final isHtml = contentType.contains('text/html') || contentType.contains('application/xhtml');
       if (isHtml) {
         try {
           final pageResp = await dio.get<String>(
             trimmed,
-            options: Options(responseType: ResponseType.plain),
+            options: Options(
+              responseType: ResponseType.plain,
+              headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              },
+            ),
           );
           if (pageResp.data != null) {
             final html = pageResp.data!;
-            // Look for open graph video or video src
-            final ogMatch = RegExp(r'<meta\s+property=["\x27]og:video(?:[:\w]+)?["\x27]\s+content=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html);
-            final videoSrcMatch = RegExp(r'<video[^>]+src=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html);
-            final sourceSrcMatch = RegExp(r'<source[^>]+src=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html);
 
-            final extracted = ogMatch?.group(1) ?? videoSrcMatch?.group(1) ?? sourceSrcMatch?.group(1);
+            // 1. Extract video title from og:title, twitter:title, or <title>
+            final ogTitle = RegExp(r'<meta\s+property=["\x27]og:title["\x27]\s+content=["\x27]([^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html)?.group(1)
+                ?? RegExp(r'<meta\s+content=["\x27]([^"\x27]+)["\x27]\s+property=["\x27]og:title["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+            final twTitle = RegExp(r'<meta\s+name=["\x27]twitter:title["\x27]\s+content=["\x27]([^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+            final docTitle = RegExp(r'<title[^>]*>([^<]+)</title>', caseSensitive: false).firstMatch(html)?.group(1);
+
+            var rawTitle = ogTitle ?? twTitle ?? docTitle;
+            if (rawTitle != null && rawTitle.trim().isNotEmpty) {
+              // Decode HTML entities
+              rawTitle = rawTitle
+                  .replaceAll('&amp;', '&')
+                  .replaceAll('&quot;', '"')
+                  .replaceAll('&#39;', "'")
+                  .replaceAll('&lt;', '<')
+                  .replaceAll('&gt;', '>')
+                  .replaceAll('&nbsp;', ' ')
+                  .trim();
+
+              // Remove trailing site branding
+              rawTitle = rawTitle.replaceAll(RegExp(r'\s*[\-|–|—|\|]\s*(YouTube|TikTok|Facebook|Instagram|Vimeo|Reddit|Twitter|X).*$', caseSensitive: false), '').trim();
+              if (rawTitle.isNotEmpty) {
+                extractedTitle = rawTitle;
+              }
+            }
+
+            // 2. Discover video direct streams
+            final ogMatch = RegExp(r'<meta\s+(?:property|name)=["\x27](?:og:video(?::secure_url|:url)?|twitter:player:stream)["\x27]\s+content=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html)?.group(1)
+                ?? RegExp(r'<meta\s+content=["\x27](https?://[^"\x27]+)["\x27]\s+(?:property|name)=["\x27](?:og:video(?::secure_url|:url)?|twitter:player:stream)["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+            final videoSrcMatch = RegExp(r'<video[^>]+src=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+            final sourceSrcMatch = RegExp(r'<source[^>]+src=["\x27](https?://[^"\x27]+)["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+            final directStreamMatch = RegExp(r'["\x27](https?://[^"\x27]+\.(?:mp4|webm|mkv|m3u8|mov)(?:\?[^"\x27]*)?)["\x27]', caseSensitive: false).firstMatch(html)?.group(1);
+
+            var extracted = ogMatch ?? videoSrcMatch ?? sourceSrcMatch ?? directStreamMatch;
             if (extracted != null && extracted.isNotEmpty) {
+              extracted = extracted.replaceAll(r'\/', '/').replaceAll(r'\u0026', '&');
               resolvedUrl = extracted;
             }
           }
         } catch (_) {}
       }
 
-      // Extract filename from Content-Disposition if present
+      // Priority 1: Use extracted video title from page
       String? fileName;
-      final disposition = headers.value('content-disposition');
-      if (disposition != null && disposition.contains('filename')) {
-        final match = RegExp(r'filename\*?=(?:UTF-8)?["\x27]?([^";\x27]+)', caseSensitive: false).firstMatch(disposition);
-        if (match != null) {
-          fileName = Uri.decodeComponent(match.group(1)?.replaceAll('"', '').replaceAll("'", '').trim() ?? '');
+      if (extractedTitle != null && extractedTitle.isNotEmpty) {
+        fileName = '$extractedTitle.mp4';
+      }
+
+      // Priority 2: Extract filename from Content-Disposition if present
+      if (fileName == null || fileName.isEmpty) {
+        final disposition = headers.value('content-disposition');
+        if (disposition != null && disposition.contains('filename')) {
+          final match = RegExp(r'filename\*?=(?:UTF-8)?["\x27]?([^";\x27]+)', caseSensitive: false).firstMatch(disposition);
+          if (match != null) {
+            fileName = Uri.decodeComponent(match.group(1)?.replaceAll('"', '').replaceAll("'", '').trim() ?? '');
+          }
         }
       }
 
-      // Fallback filename from URL path
+      // Priority 3: Fallback filename from URL path or query params
       if (fileName == null || fileName.isEmpty) {
         final parsed = Uri.tryParse(resolvedUrl) ?? uri;
-        final lastSegment = p.basename(parsed.path);
-        if (lastSegment.isNotEmpty && lastSegment.contains('.') && !lastSegment.endsWith('.html')) {
-          fileName = lastSegment;
+        final queryTitle = parsed.queryParameters['title'] ?? parsed.queryParameters['filename'] ?? parsed.queryParameters['name'];
+        if (queryTitle != null && queryTitle.trim().isNotEmpty) {
+          fileName = queryTitle.contains('.') ? queryTitle : '$queryTitle.mp4';
         } else {
-          final ext = _guessExtensionFromMime(contentType);
-          fileName = 'video_${DateTime.now().millisecondsSinceEpoch}$ext';
+          final lastSegment = p.basename(parsed.path);
+          if (lastSegment.isNotEmpty && lastSegment.contains('.') && !lastSegment.endsWith('.html')) {
+            fileName = lastSegment;
+          } else {
+            final ext = _guessExtensionFromMime(contentType);
+            fileName = 'video_${DateTime.now().millisecondsSinceEpoch}$ext';
+          }
         }
       }
 

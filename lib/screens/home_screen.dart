@@ -95,9 +95,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_analyzedMeta == null || !_analyzedMeta!.isDirectMedia) return;
 
     final downloadProvider = Provider.of<DownloadProvider>(context, listen: false);
+    final fileName = _analyzedMeta!.suggestedFileName;
+    final downloadUrl = _analyzedMeta!.resolvedUrl;
+
     downloadProvider.addDownload(
-      url: _analyzedMeta!.resolvedUrl,
-      suggestedName: _analyzedMeta!.suggestedFileName,
+      url: downloadUrl,
+      suggestedName: fileName,
       totalBytes: _analyzedMeta!.totalBytes,
       acceptsRanges: _analyzedMeta!.acceptsRanges,
       mimeType: _analyzedMeta!.mimeType,
@@ -105,9 +108,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Added to queue: ${_analyzedMeta!.suggestedFileName}'),
-        backgroundColor: AppTheme.primaryVioletDark,
+        content: Row(
+          children: [
+            const Icon(Icons.downloading_rounded, color: AppTheme.accentNeon, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Downloading: $fileName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1E1428),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
       ),
     );
 

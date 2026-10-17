@@ -268,18 +268,22 @@ class _VideoPreviewCardState extends State<VideoPreviewCard> {
 
                 // Metrics Grid
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildMetricItem(
-                      label: l10n.get('file_size'),
-                      value: meta.formattedSize,
-                      icon: Icons.data_usage_rounded,
+                    Expanded(
+                      child: _buildMetricItem(
+                        label: l10n.get('file_size'),
+                        value: meta.formattedSize,
+                        icon: Icons.data_usage_rounded,
+                      ),
                     ),
-                    _buildMetricItem(
-                      label: l10n.get('range_support'),
-                      value: meta.acceptsRanges ? l10n.get('range_yes') : l10n.get('range_no'),
-                      icon: meta.acceptsRanges ? Icons.check_circle_outline : Icons.info_outline,
-                      valueColor: meta.acceptsRanges ? AppTheme.successGreen : AppTheme.warningAmber,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildMetricItem(
+                        label: l10n.get('range_support'),
+                        value: meta.acceptsRanges ? 'Supported' : 'Direct Stream',
+                        icon: meta.acceptsRanges ? Icons.check_circle_outline : Icons.info_outline,
+                        valueColor: meta.acceptsRanges ? AppTheme.successGreen : AppTheme.warningAmber,
+                      ),
                     ),
                   ],
                 ),
@@ -319,26 +323,34 @@ class _VideoPreviewCardState extends State<VideoPreviewCard> {
     Color? valueColor,
   }) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 18, color: const Color(0xFF94A3B8)),
         const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: TextStyle(
-                color: valueColor ?? Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: valueColor ?? Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );

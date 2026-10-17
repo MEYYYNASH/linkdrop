@@ -13,12 +13,15 @@ class DownloadEngine {
       : _dio = dio ??
             Dio(
               BaseOptions(
-                connectTimeout: const Duration(seconds: 15),
-                receiveTimeout: const Duration(minutes: 60),
+                connectTimeout: const Duration(seconds: 20),
+                receiveTimeout: const Duration(hours: 2),
                 followRedirects: true,
-                maxRedirects: 5,
+                maxRedirects: 8,
                 headers: {
-                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) LINKDROP/1.0',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                  'Accept': '*/*',
+                  'Accept-Encoding': 'identity',
+                  'Connection': 'keep-alive',
                 },
               ),
             );
@@ -34,6 +37,13 @@ class DownloadEngine {
     _cancelTokens[task.id] = cancelToken;
 
     final file = File(task.savePath);
+    // Ensure parent directories exist
+    if (!file.parent.existsSync()) {
+      try {
+        file.parent.createSync(recursive: true);
+      } catch (_) {}
+    }
+
     var existingBytes = 0;
 
     // Check if resuming an existing partially downloaded file
@@ -42,7 +52,18 @@ class DownloadEngine {
       task.downloadedBytes = existingBytes;
     }
 
-    final headers = <String, dynamic>{};
+    final headers = <String, dynamic>{
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity',
+    };
+
+    final uri = Uri.tryParse(task.url);
+    if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+      headers['Referer'] = '${uri.scheme}://${uri.host}/';
+      headers['Origin'] = '${uri.scheme}://${uri.host}';
+    }
+
     if (existingBytes > 0 && task.acceptsRanges) {
       headers['Range'] = 'bytes=$existingBytes-';
     } else if (existingBytes > 0 && !task.acceptsRanges) {
@@ -50,7 +71,7 @@ class DownloadEngine {
       existingBytes = 0;
       task.downloadedBytes = 0;
       if (file.existsSync()) {
-        file.deleteSync();
+        try { file.deleteSync(); } catch (_) {}
       }
     }
 
@@ -64,22 +85,56 @@ class DownloadEngine {
     IOSink? sink;
 
     try {
-      final response = await _dio.get<ResponseBody>(
-        task.url,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: headers,
-          validateStatus: (status) => status != null && (status >= 200 && status < 400),
-        ),
-        cancelToken: cancelToken,
-      );
+      Response<ResponseBody> response;
+      try {
+        response = await _dio.get<ResponseBody>(
+          task.url,
+          options: Options(
+            responseType: ResponseType.stream,
+            headers: headers,
+            validateStatus: (status) => status != null && (status >= 200 && status < 400),
+          ),
+          cancelToken: cancelToken,
+        );
+      } on DioException catch (dioErr) {
+        // If range request was rejected (416 or 400), restart cleanly from byte 0
+        if (existingBytes > 0 && (dioErr.response?.statusCode == 416 || dioErr.response?.statusCode == 400)) {
+          headers.remove('Range');
+          existingBytes = 0;
+          task.downloadedBytes = 0;
+          if (file.existsSync()) {
+            try { file.deleteSync(); } catch (_) {}
+          }
+          response = await _dio.get<ResponseBody>(
+            task.url,
+            options: Options(
+              responseType: ResponseType.stream,
+              headers: headers,
+              validateStatus: (status) => status != null && (status >= 200 && status < 400),
+            ),
+            cancelToken: cancelToken,
+          );
+        } else {
+          rethrow;
+        }
+      }
+
+      final isPartial = response.statusCode == 206;
+      if (!isPartial && existingBytes > 0) {
+        // Server responded with 200 OK (ignored Range), write fresh from byte 0
+        existingBytes = 0;
+        task.downloadedBytes = 0;
+        if (file.existsSync()) {
+          try { file.deleteSync(); } catch (_) {}
+        }
+      }
 
       final respHeaders = response.headers;
       final contentLengthStr = respHeaders.value('content-length');
       if (contentLengthStr != null) {
         final length = int.tryParse(contentLengthStr) ?? -1;
         if (length > 0) {
-          if (existingBytes > 0 && response.statusCode == 206) {
+          if (existingBytes > 0 && isPartial) {
             task.totalBytes = existingBytes + length;
           } else {
             task.totalBytes = length;
@@ -91,8 +146,8 @@ class DownloadEngine {
           respHeaders.value('content-range') != null;
       task.acceptsRanges = acceptsRangesHeader;
 
-      // Open file for streaming append
-      sink = file.openWrite(mode: FileMode.writeOnlyAppend);
+      // Open file for streaming chunk writing
+      sink = file.openWrite(mode: isPartial ? FileMode.writeOnlyAppend : FileMode.writeOnly);
       final stream = response.data!.stream;
 
       final completer = Completer<void>();
